@@ -186,7 +186,7 @@ In this sense, it was defined to create 3 _K-folds_, due to hardware processing.
 $$
 \hat{\mbox{RMSE}}(\lambda) = \frac{1}{3} \sum_{b=1}^3 \hat{\mbox{RMSE}}_b(\lambda)
 $$
-The final step is to select the parameter that minimizes the RMSE (see Results section). 
+The final step was to select the parameter that minimizes the RMSE (see Results section). 
 
 
 ### 2.5.-Testing calibrated algorithm
@@ -322,7 +322,7 @@ An acceptable prediction, since is below 1, fulfilling the machine learning requ
 ## 4.-Conclusions
 
 
-Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rate of different movies from the MovieLens dataset. The approach used 3 variables (average of all rankings, average ranking of a movie and user-specific effect), and added penalizations to the last variables as well to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **0.8648177**, fulfilling the requirements of the course.   
+Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rate of different movies from the MovieLens dataset. The approach used 3 variables (average of all rankings, average ranking of a movie and user-specific effect), and added penalizations to the last variables as well, to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **0.8648177**, fulfilling the requirements of the course.   
 
 Even though this project is based in a consistent machine learning approach (recommendation system), there are still data patterns that could be integrated to the algorithm. For example, it seems that rates are related not only to movie genres (drama, comedy, etc) and/or topics (mafia, medieval, etc), but also to actor/actress. Considering them undoubtedly will help to improve the algorithm, being extremely useful to predict rates in the streaming company or even for similar activities. 
  
