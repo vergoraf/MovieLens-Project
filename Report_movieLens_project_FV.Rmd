@@ -135,7 +135,7 @@ $$
 \hat{b}_u = Y_{u,i} - \hat{\mu} -\hat{b}_i 
 $$
 
-### 2.3.-Testing algorithm
+### 2.3.-Testing the algorithm
 
 Finally, the algorithm was tested using the typical error loss expressed as the residual mean squared error (RMSE).
 

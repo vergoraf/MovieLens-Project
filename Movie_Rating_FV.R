@@ -2,7 +2,7 @@
 # Create edx set (training set), validation set (final hold-out test set)
 ##########################################################
 
-# Note: this process could take a couple of minutes
+# Note: this process could take a couple of minutes.
 
 #Installing packages if it is necessary
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
