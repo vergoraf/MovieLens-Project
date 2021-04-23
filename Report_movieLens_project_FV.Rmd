@@ -99,8 +99,8 @@ $$
 Where:  
 $y_{u,i}$: predicted rate  
 $\mu$: average of all ratings  
-$b_i$: average ranking for movie $i$ or _bias_  
-$b_u$: user-specific effect $u$
+$b_i$: average ranking for movie$i$ or _bias_  
+$b_u$: user-specific effect$u$  
 $\varepsilon_{u,i}$: independent errors sampled taking into account   previous parameters.   
 
 The formula indicates that the average ($\mu$) of all ratings is the simplest approach to predict a certain rate. However, as the experience says there are movies that are rated higher than others and also there were users who rated extremely positive and negative than others. Although this is complicated to visualize, it can be inferred from the graphs below:
@@ -125,7 +125,7 @@ gridExtra::grid.arrange(p2, p1, ncol = 2)
 As it can be observed,there are movies that are rated more often that others, and there are users who rated more frequently than others. 
 
 
-Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie $_i$. On the other side $b_u$ represents the average rate of user $_u$ corrected by $b_i$.
+Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie$_i$. On the other side $b_u$ represents the average rate of user$_u$ corrected by $b_i$.
 
 $$
 \hat{b}_i = Y_{u,i} - \hat{\mu}  
@@ -186,7 +186,7 @@ In this sense, it was defined to create 3 _K-folds_, due to hardware processing.
 $$
 \hat{\mbox{RMSE}}(\lambda) = \frac{1}{3} \sum_{b=1}^3 \hat{\mbox{RMSE}}_b(\lambda)
 $$
-The final step was to select the parameter that minimizes the RMSE (see Results section). 
+The final step was to select the parameter that minimizes the RMSE (see 3.-Results section). 
 
 
 ### 2.5.-Testing calibrated algorithm
