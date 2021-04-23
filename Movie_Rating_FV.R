@@ -7,6 +7,8 @@
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
 if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(broom)) install.packages("broom", repos = "http://cran.us.r-project.org")
+if(!require(pander)) install.packages("pander", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)# machine learning procedure
@@ -179,8 +181,6 @@ lambda# optimal lambda
 #Saving values
 save(rmses,file="Capstone/rmses.rda")
 save(lambda,file="Capstone/lambda.rda")
-
-load(file="Capstone/rmses.rda")
 
 ##Final calculation
 mu <- mean(edx$rating) # average of all ratings
