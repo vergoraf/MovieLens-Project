@@ -3,203 +3,423 @@ title: "Report movieLens Project"
 author: "Felipe Vergara"
 output:
   pdf_document: default
-  html_document: default
 ---
+output:
+   bookdown::pdf_book:
+    includes:
+     before_body: title_page.sty #Title page 
+    citation_package: natbib #activate bibliography option
+    highlight: tango # specifies the syntax highlighting style
+    latex_engine: xelatex
+    number_sections: yes # to enumerate sections at each table header.
+    toc: yes # activate table of contents
+    toc_depth: 4 #up to 4 depths of headings (specified by #, ##, ###, ####)
+mainfont: Lato #font style
+header-includes: \renewcommand{\contentsname}{Summary}
+urlcolor: blue
+bibliography: bibliography.bib
+biblio-style: apalike
+link-citations: TRUE
+---
+\newpage
+# Introduction
 
-## 1.-Introduction
+Nowadays big companies are available to collect massive amount of customer data which can be useful to improve their products and services. Generally, one important approach is to make a simple and clear experience to users by filtering vital information, according to user's preferences, interest or behaviour to an item/product [@Isinkaye]. As a result, a customer finds easily an item related to his preference.  
 
-This is a report of estimating movie ratings using data from the MovieLens dataset to fulfill the requirements of HarvardX Data Science Certificate. Basically the aim is to predict how a user will rate a specific movie according to specific dataset characteristics.The original data was obtained from [this website](http://files.grouplens.org/datasets/movielens/ml-10m.zip).
+The present document is one of the items of the first **Capstone** project and part of the requirements to obtain the **HarvardX Data Science Certificate** (For further details, as the production of the training and test data, please look on [Movie_Rating_FV](https://github.com/vergoraf/MovieLens-Project/blob/main/Movie_Rating_FV.R)). It presents the elaboration of a recommendation system 
+using the Movielens data, obtained from [this website](http://files.grouplens.org/datasets/movielens/ml-10m.zip). The aim is to predict how a user will rate a specific movie according to specific dataset characteristics such as average rating, average user rating, genre effect, etc.
 
-It was used the following libraries:
+There are different *Movielens* data versions, however, to make a simple analysis it was used the 10M version, released in January 2009. At difference with other versions, no demographic information is included, being the user represented by an ID. 
 
-```{r instlibraries, message=FALSE, warning=FALSE, error=FALSE}
+In the next sections is presented the data exploration on different variables, then is applied the methodology applied by [@rafalab], extending the analysis including the genre effect variable. Afterwards, it is included the penalization approach, calculating $\lambda$ for the variables user and movies through cross-validation. Finally, it is displayed the results and conclusions, fulfilling the requirement for this first Capstone project.
+
+```{r instlibraries, echo=FALSE, message=FALSE, warning=FALSE, error=FALSE}
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
 if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
-if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
-if(!require(broom)) install.packages("broom", repos = "http://cran.us.r-project.org")
-if(!require(pander)) install.packages("pander", repos = "http://cran.us.r-project.org")
+if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
 ```
 
+# Analysis
+
+## Libraries and loading data
+
+Diverse tools are necessary to run the project, thus the libraries here below where used through the project: 
 
 ```{r loadinglibraries, message=FALSE, warning=FALSE}
-library(tidyverse)
+library(tidyverse)# organization and visualization data
 library(caret)# machine learning procedure
-library(data.table)
-library (broom)
-library(pander)#to create table
-
+library( kableExtra) #for table presentations
 ```
 
-### 1.1-Load the training and test data:
+Likewise, the training and test data and other resources must be loaded at this stage, instead of being produced within this project, due to memory processing. However, as a particularity of this project, resources will be added and removed constantly to do not overload the memory.
 
 ```{r echo=FALSE}
-setwd("D:/Data_science")
-load("Capstone/validation.rda")
-load("Capstone/edx.rda")
-load(file="Capstone/rmses.rda")# used in results
+load("rda_data/validation.rda") #test data
+load("rda_data/edx.rda")#training data
+load(file="rda_data/rmses.rda")# used in results
+load(file="rda_data/genres_edx.rda")# b_k of each rate
+load(file="rda_data/genres_count.rda")#count of the existing genres
+load(file="rda_data/genre_rating.rda") #average rating of each genre
+load(file="rda_data/rat_time.rda")# rating date
+load(file="rda_data/rmses.rda")# rmses data from cross-validation
+load(file="rda_data/b_k.list.rda")# rmses data from cross-validation
 ```
 
-The dataset is compounded by ratings of users to movies from a score of 0 (very bad) to 5 (very good). In this case, the data was already sortered and separated previously in the training and test data.
+## Dataset description and sorting data
 
-As according to the machine learning methodology, **the training data is for the algorithm creation, and the test data is for assessing our final algorithm**. Generally, during the procedure is used mostly the training data which corresponds to the 90% of the dataset. Therefore, here it is presented briefly the training data which is a large dataset.
+The dataset is compounded by ratings of users to movies from a score of 0 (very bad) to 5 (very good). It contains more than 10 million ratings of of 10681 movies done by 71567 users [@Movielens].
 
-_Training data dimension_:
-```{r echo=FALSE}
-rows<-format(dim(edx)[1],scientific=FALSE)
-columns<-dim(edx)[2]
-dataframe<-data.frame(rows, columns)
-pander(dataframe)
+As the recommendation system is a machine learning application, it must be created a training data and testing data. **the former is for the algorithm creation, and the latter is for assessing our final algorithm**. Generally, during the procedure is used mostly the training data which corresponds to the 90% of the dataset. The training dataset dimensions can be seen in Table \@ref(tab:training-data-dimension).
+
+```{r training-data-dimension, echo=FALSE}
+edx%>% summarize( rows= dim(edx)[1], columns= dim(edx)[2])%>% kbl(booktabs = TRUE, caption = "Training data dimension",digits = 3, format.args = list(big.mark = ",",  scientific = FALSE), "latex")%>%kable_styling(latex_options = "hold_position") 
 ```
-As a first look, an user can rate different movies, so it was necessary to have a frame of how many users and movies were related. 
+As it can be seen, it is the 90 % of the raw data and consists of six columns. Below is presented an extract of the training data, being possible to identify the disposable variables in Table \@ref(tab:dataset-example):
 
-
-_Dataset example_:
-```{r echo=FALSE}
-if(knitr::is_html_output()){
-  knitr::kable(head(edx,5), "html") %>%
-    kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE)
-} else{
-  knitr::kable(head(edx,5), "latex", booktabs = TRUE) %>%
-    kableExtra::kable_styling(font_size = 7)
-}
+```{r dataset-example, echo=FALSE}
+kbl(head(edx,5), digits = 3, format.args = list(big.mark = ",", 
+                                                scientific = FALSE),"latex", booktabs = TRUE, caption="Dataset example") %>%
+  kable_styling(font_size = 7)%>%kable_styling(latex_options = "hold_position")
 ```
 
+## Exploration  
 
-Indeed it contains a large number of users and movies as it can be seen in the table below:
+### Users & Movies
 
-
-_User and movies numbers_:
-```{r echo=FALSE, warning=FALSE}
-users <- n_distinct(edx$userId)
-movies <- n_distinct(edx$movieId)
-dataframe <- data.frame(users, movies)
-pander(dataframe)           # Create the table
+In this dataset, at least an user had rated 20 movies, however, due to the subdivision, this rating rate could have been decreased. Therefore, it was necessary to have a frame of how many users and movies are included in the training data (Table \@ref(tab:user-and-movies-numbers)). 
+```{r user-and-movies-numbers, echo=FALSE, warning=FALSE}
+edx %>% summarize(users = n_distinct(userId), movies = n_distinct(movieId)) %>%kbl(booktabs = TRUE, caption = "User and movies numbers",digits = 3, format.args = list(big.mark = ",",  scientific = FALSE))%>%kable_styling(latex_options = "hold_position")
 ```
 
-## 2.-Analysis
+Additionally, let see how is the rating rate (Figure \@ref(fig:histogram-users-and-movies)): 
 
-After a brief exploration the next step was to explore the data in detail with the purpose to identify the variable distribution, to clean it if it is possible, and finally to decide which method was the most appropiate for the given dataset.
-
-
-### 2.1.-Cleaning
-
-The dataset has 6 columns, and from all of them the **timestamp** variable did not look helpful for the estimation, thus it was deleted from the table.
-
-```{r }
-edx<-edx%>%select(-timestamp) 
-```
-
-### 2.2.-Predicting algorithm
-
-According of what it can be seen in the dataset, it was decided to use this approach:
-
-$$
-Y_{u,i} = \mu + b_i +b_u+ \varepsilon_{u,i}
-$$
-Where:  
-$y_{u,i}$: predicted rate  
-$\mu$: average of all ratings  
-$b_i$: average ranking for movie$i$ or _bias_  
-$b_u$: user-specific effect$u$  
-$\varepsilon_{u,i}$: independent errors sampled taking into account   previous parameters.   
-
-The formula indicates that the average ($\mu$) of all ratings is the simplest approach to predict a certain rate. However, as the experience says there are movies that are rated higher than others and also there were users who rated extremely positive and negative than others. Although this is complicated to visualize, it can be inferred from the graphs below:
-
-
-```{r histogram users and movies, echo=FALSE, fig.width=5, fig.height=3}
-p1 <- edx %>% 
-  count(movieId) %>% 
-  ggplot(aes(n)) + 
-  geom_histogram(bins = 25, color = "black") + 
-  scale_x_log10() + 
-  ggtitle("Movies")
-p2 <- edx %>% 
-  count(userId) %>% 
-  ggplot(aes(n)) + 
-  geom_histogram(bins = 25, color = "black") + 
-  scale_x_log10() + 
-  ggtitle("Users")
+```{r histogram-users-and-movies, echo=FALSE, fig.width=5, fig.height=2,message=FALSE,fig.cap='Count given by users (top) and by movies (bottom)'}
+#histogram user and movies
+p1 <- edx %>% count(movieId) %>% ggplot(aes(n)) + geom_histogram(bins = 30, color = "black") + labs(x='number of ratings',y="number of movies")+ 
+  scale_x_log10() + ggtitle("Movies")
+p2 <- edx %>% count(userId) %>% ggplot(aes(n)) + geom_histogram(bins = 30, color = "black") + labs(x='number of ratings',y="number of users")+scale_x_log10() + ggtitle("Users")
 gridExtra::grid.arrange(p2, p1, ncol = 2)
 ```
 
-As it can be observed,there are movies that are rated more often that others, and there are users who rated more frequently than others. 
+It can be seen that users are concentrated around 80 ratings per user and a movie was rated in average with 100 ratings. As a result, this indicate that there are a diverse user rating in the dataset, as well with the movies, which it could have an influence in how ratings were done. 
+The next step so was to explore the rating average according to the mentioned above (Figure \@ref(fig:histogram-users-and-movies-avg)). 
 
 
-Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie$_i$. On the other side $b_u$ represents the average rate of user$_u$ corrected by $b_i$.
+```{r histogram-users-and-movies-avg, echo=FALSE, fig.width=5, fig.height=3,message=FALSE,fig.cap='Average rating frequency given by users (top) and by movies (bottom)'}
+p2<-edx%>%group_by(userId)%>% summarize(avg=mean(rating))%>% 
+  ggplot(aes(avg)) + geom_histogram(bins=30, color='black') +
+  labs(x='user average ratings',y='rating counts') 
+p1<-edx%>%group_by(movieId)%>% summarize(avg=mean(rating))%>% 
+  ggplot(aes(avg)) + geom_histogram(bins=30, color='black')+
+  labs(x='Movie average ratings',y='rating counts') 
+gridExtra::grid.arrange(p2, p1, ncol = 1)
+```
 
-$$
-\hat{b}_i = Y_{u,i} - \hat{\mu}  
-$$
+As it can be observed,there is a certain pattern of how users rate movies and how movies are rated. For example, both extremes (great and bad movies) are rated in much less quantity than regular movies. This is a similar pattern with users. Thus, both variables will be included in the algorithm (see [Predicting algorithm] section). 
 
-$$
-\hat{b}_u = Y_{u,i} - \hat{\mu} -\hat{b}_i 
-$$
+### Genre
 
-### 2.3.-Testing the algorithm
+Let evaluate if there is a genre effect over the data. First of all, it must be identified how many genres are in the dataset (Table \@ref(tab:genre-count)).
 
-Finally, the algorithm was tested using the typical error loss expressed as the residual mean squared error (RMSE).
+```{r genre-classification, echo=TRUE, warning=FALSE, eval=FALSE}
+##movies genre classification
+#How many genres are in the dataset?
+sep_genre<-list.append(str_split(edx$genres,'\\|'))
+genres_edx<-unique(combine(sep_genre))
+save(genres_edx,file="Capstone/rda_data/genres_edx.rda")
+load(file="Capstone/rda_data/genres_edx.rda")
+rm(sep_genre)
+```
 
-$$
-\mbox{RMSE} = \sqrt{\frac{1}{N} \sum_{u,i}^{} \left( \hat{y}_{u,i} - y_{u,i} \right)^2 }
-$$
+```{r genre-count, echo=FALSE, warning=FALSE}
+matrix(genres_edx, nrow = 4, ncol= 5) %>% kbl(booktabs = TRUE, linesep = "", caption = 'Unique genre in edx dataset') %>% kable_styling(latex_options = c("striped","HOLD_position"))
+```
+
+20 genres can be discriminated, but as customer, it is known that the film industry predominates genres such as comedy, romance and action, while the rest is less present. So, how many ratings are for each of them? (Table \@ref(tab:rating-per-genre)).
+
+```{r rating-per-genre, echo=FALSE, warning=FALSE}
+grat<-data.frame( genres_count[1:10,2],  genres_count[1:10,1],genres_count[11:20,2],genres_count[11:20,1])
+colnames(grat)<-c("genre","rating count","genre"," rating count")#Dividing the data in 2 for a better visualization     
+grat%>%kbl(format.args = list(big.mark = ",", 
+                                                scientific = FALSE),"latex", booktabs = TRUE, caption="Rating per genre") %>%
+  kable_styling(font_size = 7)%>%kable_styling(latex_options = "hold_position")
+```
+
+\newpage
+As the assumption indicated, there are genres that predominates in the dataset. So, let see how is the rating among them. Is there a significant difference among them? 
+
+In this case, to set the script, it was adapted from [@dfedeoli] algorithm: 
+
+```{r genre-rating-formula, echo=TRUE, eval=FALSE}
+#How is the rating for each genre? are there a difference among them?
+#Identifying average rating
+#table average, se (adapted from dfedeoli calculations)
+genre_rating<-matrix(nrow=20, ncol=3)#matrix with ave and se values
+j<-1 #fundamental for looping
+for (i in genres_edx){
+  grating<-edx[which(str_detect(edx$genres,i)),]%>% 
+    summarize(n = n(), avg = mean(rating), se = sd(rating)/sqrt(n()))#calculating value 
+  genre_rating[j,1]<-grating$avg#avg value for each genre
+  genre_rating[j,2]<-grating$se# se value for each genre
+  genre_rating[j,3]<-i# genre label
+  j<-j+1
+}
+```
+
+To make much plausible the figure, it was filtered out "no genres listed",because it has a large standard error, due to the few movies associated with them (n=7), (Figure \@ref(fig:genre-rating)).
+
+```{r genre-rating, echo=FALSE, fig.width=8, fig.height=2.5,message=FALSE, fig.cap='Average rating for each genre', warning=FALSE}
+colnames(genre_rating)<- c("avg","se","genre")
+ggplot(filter(genre_rating,se<=0.1),  aes(y=reorder(genre,as.numeric(avg),FUN=mean), x=as.numeric(avg))) + #to filter "no genre movies"
+  geom_point(size=0.7)+ 
+  geom_errorbarh(aes(xmin=as.numeric(avg)-1.96*as.numeric(se),
+                     xmax = as.numeric(avg)+1.96*as.numeric(se)),
+                 height=0.3, colour="black", alpha=0.9, size=0.5)+
+  theme_minimal()+
+  labs(y = "" ) +
+  labs(x = "Average ranking") 
+```
+
+As a result, it seems that there is a genre effect (a minimal one), so it will be included in the algorithm (see [Predicting algorithm] section). 
+
+### Rating date
+
+The last analysed variable was the rating date. As it could be seen in the Table \@ref(tab:dataset-example), the rating date is "timestamp" column, which represents date as integer. So, this column data was transformed to "POSIXct". 
+
+```{r rate-time, eval=FALSE, echo=TRUE}
+#Rating date 
+rat_time<-edx%>%mutate(daterat=as_datetime(timestamp))%>%
+  select(rating,daterat,genres)
+rat_time$ym<-round_date(rat_time$daterat,unit="month")
+rat_time$season<- quarter(rat_time$daterat)
+save(rat_time,file="Capstone/rda_data/rat_time.rda")
+```
+
+Afterwards, to have an idea of how the data is concentrated, it was aggregated in months and displayed by a boxplot to identify anomalies.
+
+```{r boxplot, echo=FALSE, fig.width=2, fig.height=2,message=FALSE, fig.cap='rating date distribution'}
+#boxplot
+rat_time%>%
+  group_by(ym)%>%
+  summarise(avg=mean(rating))%>%
+  ggplot(aes(y=avg))+
+  labs(y = "Average rating" )+
+  geom_boxplot()
+```
+
+The first conclusion from this figure is that the data is that ratings are concentrated below 3.8. Let see, how the rating date has been distributed from the beginning to the end date frame (Figure \@ref(fig:4-seasons)).
+
+```{r 4-seasons, echo=FALSE, fig.width=6, fig.height=3,message=FALSE, fig.cap='Rating through dates. Aggregated by months'}
+##graph of 4 seasons analysing rating date
+rat_time%>%
+  group_by(ym,season)%>%
+  mutate(ym=ym, season=factor(recode(season,"1"="Winter","2"="Spring","3"="Summer","4"="Autumn"),
+                       levels=c("Spring","Summer","Autumn","Winter")))%>%
+  summarise(avg=mean(rating))%>%arrange()%>%
+  filter(avg<=3.8)%>%
+  ggplot(aes(ym,avg))+
+  geom_point()+labs(y="average rating",x="Year")+
+  geom_smooth(formula= 'y~x',method="loess", se=T)+
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5,size=7),legend.position="top")+
+  ylim(3,4)+scale_x_datetime(date_breaks = "1 year",date_labels="%Y")+
+  scale_color_identity()+facet_grid(.~season)
+```
+
+In this figure, the data was organised through seasons, notwithstanding, a relevant point is that the dataset as it does not have demographic information and localisation, it is not known from which hemisphere the data comes from. So, the season analysis does not provide realistic information, but the distribution here it shows that is a bit less significant as the genre effect. As a result it was not considered for the algorithm. 
+
+## Predicting algorithm
+
+In relation to the previous section, it was decided to use movie, user and genre effect variables to create the algorithm. In this sense, it was decided to use the suggestion presented in [@rafalab], (Equation \@ref(eq:algorithm-equation)):
+
+\begin{equation}
+Y_{u,i} = \mu + b_i +b_u+ \sum_{k=1}^K x^k_{u,i} \beta_k+ \varepsilon_{u,i} (\#eq:algorithm-equation)
+\end{equation}
+with $x^k_{u,i}$ = 1 if $g_{u,i}$ is genre k  
+with $x^k_{u,i}$ = 0 if $g_{u,i}$ is not genre k
+
+Where:  
+$y_{u,i}$: Actual rate  
+$\mu$: average of all ratings  
+$b_i$: average ranking for movie$i$ or _bias_  
+$b_u$: user-specific effect$u$  
+$b_k$: genre effect$k$  
+$\sum_{k=1}^K x^k_{u,i}$: sum of each genre effect of a x rating  
+
+$\varepsilon_{u,i}$: independent errors sampled taking into account   previous parameters.   
+
+When is considered as prediction, the $\varepsilon_{u,i}$ is out. So, 
+the formula indicates that the average ($\hat{\mu}$) of all ratings is the simplest approach to predict a certain rate. However, there were movies that are rated higher than others and also  users who rated extremely positive and negative than others (Figure \@ref(fig:histogram-users-and-movies)). Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie$_i$ (Equation \@ref(eq:movie-effect)). On the other side $b_u$ represents the average rate of user$_u$ corrected by $b_i$ (Equation \@ref(eq:usereff-equation)).
+
+\begin{equation}
+\hat{b}_i = \frac{1}{N}\sum_{i} Y_{u,i} - \hat{\mu} (\#eq:movie-effect)
+\end{equation}
+
+\begin{equation}
+\hat{b}_u = \frac{1}{N}\sum_{u} Y_{u,i} - \hat{\mu} -\hat{b}_i (\#eq:usereff-equation)
+\end{equation}
+
+### Genre effect $\hat{b}_k$ and Sum
+At difference with $\hat{b}_i$ and $\hat{b}_u$, there is not only 1 genre effect $\hat{b}_k$, instead it must be computed the sum of the 20 genre effect over a rating. This calculation was highly memory demanding and it was a huge handicap for this project, since it had to be subdivided the training dataset to be computed. 
+
+The $\hat{b}_k$ calculation was organised in the following way: 
+
+#### Subdivision    
+\hfill\break 
+To decrease the memory RAM consumption to an acceptable performance, the data was subdivided through genre type, in other words, in 20 times, being each new dataset only movies of a corresponding genre.
+
+```{r edx-subdivision, eval=FALSE, echo=TRUE}
+#Due to hardware processing ( it was impossible to apply at 1 shot)
+#1.- start  subdividing the dataset according to each genre
+edx_<-list()
+for (i in 1:length(genres_edx)){
+  a<-as.data.frame(sapply(genres_edx[i], function(x) {
+    str_detect(edx$genres, x)}))
+  edx<-cbind(edx,a)
+  edx_[[i]]<-edx%>%filter(!!sym(genres_edx[i])== TRUE)
+  edx<-select(edx,-7)
+}
+rm(a)
+save(edx_,file="Capstone/rda_data/edx_.rda")
+load(file="Capstone/rda_data/edx_.rda")
+```
+
+
+#### Establish $\hat{b}_k$ for each genre    
+\hfill\break
+
+Afterwards, it was implemented The $\hat{b}_k$ formula (Equation \@ref(eq:genrereff-equation)), which was exported as a list file. 
+
+\begin{equation}
+\hat{b}_k = \frac{1}{N}\sum_{k} Y_{u,i} - \hat{\mu} -\hat{b}_i -\hat{b}_u (\#eq:genrereff-equation)
+\end{equation}
+
+```{r bk-each-genre, echo=TRUE, eval=FALSE}
+#2.- establish $hat{b}_k$ for each genre
+mu <- mean(edx$rating)
+b_i <- edx %>% 
+  group_by(movieId) %>%
+  summarize(b_i = mean(rating - mu))
+b_u <- edx %>% 
+  left_join(b_i, by="movieId") %>%
+  group_by(userId) %>%
+  summarize(b_u = mean(rating - b_i - mu))
+
+b_k.list<-list()
+for(i in 1:length(genres_edx)){
+b_k <- edx_[[i]] %>% 
+  left_join(b_u, by="userId") %>%
+  left_join(b_i, by="movieId")%>%
+  summarize(b_k = mean(rating - b_i - b_u - mu))
+b_k.list[[i]]<-b_k
+}
+save(b_k.list,file="Capstone/rda_data/b_k.list.rda")
+load(file="Capstone/rda_data/b_k.list.rda")
+rm(b_i,b_k,b_u,mu,edx_)
+```
+
+#### Calculation sum $\hat{b}_k$ for each rate    
+\hfill\break
+The aim was to create a new column in the training data, being the sum of each genre $\hat{b}_k$ value of each rating (Equation\@ref(eq:sumbk-equation)). First, it was created a matrix (rows = ratings, columns = genre) with values of 1 if genre presented, and 0 when genre is not presented in a rating. Then it was multiplied with the $\hat{b}_k$, which was converted too in a matrix. 
+
+\begin{equation}
+\sum_{k=1}^K x^k_{u,i} \hat{b}_k (\#eq:sumbk-equation)
+\end{equation}
+with $x^k_{u,i}$ = 1 if $g_{u,i}$ is genre k  
+with $x^k_{u,i}$ = 0 if $g_{u,i}$ is not genre k
+
+The result of this operation is a new matrix of 1 column which was combined with the training data. However, due to memory processing, the data training data was divided 10 times (independently from the previous genre subdivision).
+The next script is an extract of all the process. Here is presented 1 of the 10 subdivisions.
+```{r sum-bk, echo=TRUE, eval=FALSE}
+#is done in this way to not overwhelm memory processing
+m_kvalues<-matrix(unlist(b_k.list))
+#subdivide edx in 10 times
+#subbdivision
+edx_1<-edx[1:1000000,]
+#matrix value genre
+a_1<-as.matrix(sapply(genres_edx, function(x) {
+  ifelse(str_detect(edx_1$genres, x)=='TRUE',1,0)}))
+#sum of  each rate with genre b_k values
+k_1<-a_1%*%m_kvalues
+rm(edx_1,a_1)
+#subbdivision
+edx_2<-edx[1000001:2000000,]
+#This is performed 10 times
+```
+
+Then, each new subdivision was appended to create again the original training data plus the new sum genre effect column, which is used in the [Cross-validation] section. 
+
+```{r append-genre-effect, echo=TRUE,eval=FALSE}
+# append k values 
+k<-rbind(k_1,k_2,k_3,k_4,k_5,k_6,k_7,k_8,k_9,k_10)
+rm(k_1,k_2,k_3,k_4,k_5,k_6,k_7,k_8,k_9,k_10)
+#add k value to edx
+edx$b_k<-k
+rm(k)
+```
+
+## Testing the algorithm
+
+Finally, the algorithm was tested using the typical error loss expressed as the residual mean squared error (RMSE) (Equation \@ref(eq:RMSE-equation)).
+
+\begin{equation}
+\mbox{RMSE} = \sqrt{\frac{1}{N} \sum_{u,i}^{} \left( \hat{y}_{u,i} - y_{u,i} \right)^2 } (\#eq:RMSE-equation)
+\end{equation}
+
 It means the typical error that is made when it is predicted a rate. The importance of this formula is to observe the differences between the rate $y_{u,i}$ with the predicted rates $\hat{y}_{u,i}$. Low values mean a better prediction of the model. Values over 1, for example, means that the typical error is larger than 1 score, so it is necessary to get values below 1. 
 
 
-### 2.4.-Penalizations
+## Penalizations
 
-Notwithstanding, before testing the algorithm it was decided to apply penalties over average ranking for movie $b_i$ and for the user-specific effect $b_u$. The idea is based that the _bias_ and the _user-specific effect_ are affected by the number of observations associated to them. So, at larger observations the penalization is lower.  
+Notwithstanding, before testing the algorithm it was decided to apply penalties over average ranking for movie $\hat{b}_i$ and for the user-specific effect $\hat{b}_u$. The idea is based that the _bias_ and the _user-specific effect_ are affected by the number of observations associated to them. So, at larger observations the penalization is lower.  For this step, it was not considered to be applied on $\hat{b}_k$, since the memory processing was would be much more than it could cover the personal computer, and as the observation number for each genre is much larger than user and movies (except for no genres listed movies), a penalization is nonsense. 
 
-In this sense, to constraint the variability of the effect sizes, it was considered that for $b_i$ and $b_u$ values having few observations, it was better to be assigned values close or even 0, instead of the provided value. The penalization is represented by  $\lambda$, which is a tuning parameter, being practically ignored when there were large observations. At a larger $\lambda$, shrinks more. 
+In this sense, to constraint the variability of the effect sizes, it was considered that for $\hat{b}_i$ and $\hat{b}_u$ values having few observations, it was better to be assigned values close or even 0, instead of the provided value. The penalization is represented by  $\lambda$, which is a tuning parameter, being practically ignored when there were large observations. At a larger $\lambda$, shrinks more. 
 
-Thus, the minimization is represented in the following way:
+Thus, the minimization is represented in the following way (Equation \@ref(eq:minimization-equation)):
 
-$$
+\begin{equation}
 \frac{1}{N}\sum_{u,i} \left(y_{u,i} - \mu - b_i - b_u \right)^2 + 
-\lambda \left(\sum_{i} b_i^2 + \sum_{u} b_u^2\right)
-$$
-where to calculate the penalization to $b_i$ and $b_u$ are expressed like this:
+\lambda \left(\sum_{i} b_i^2 + \sum_{u} b_u^2\right) (\#eq:minimization-equation)
+\end{equation}
 
-$$
-\hat{b}_i(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}\right)
-$$
-$$
-\hat{b}_u(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu} - \hat{b}_u\right)
-$$
+where to calculate the penalization to $b_i$ (Equation \@ref(eq:bipena-equation)), and $b_u$ (Equation \@ref(eq:bupena-equation)) are expressed like this:
+
+\begin{equation}
+\hat{b}_i(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}\right) (\#eq:bipena-equation)
+\end{equation}
+\begin{equation}
+\hat{b}_u(\lambda) = \frac{1}{\lambda + n_u} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu} - \hat{b}_i\right) (\#eq:bupena-equation)
+\end{equation}
  
-One important point is that the definition of the $\lambda$ value had to be calculated in a certain way. For this purpose it was selected the cross-validation method, which **must be applied on the training set**. 
+One important point is that the definition of the $\lambda$ value had to be calculated. For this purpose it was selected the cross-validation method, which **must be applied on the training set**. 
 
 
-#### 2.4.1.-Cross-validation
+### Cross-validation
 
 The basic idea of cross-validation is to create an algorithm or to estimate a parameter, in this case $\lambda$, and to test it in the training data. Therefore, to be consistent with the machine learning methodology, the training data must be split between **training data** and **validate set data**. Then, to obtain more convinced results, this procedure has to occure several times over the original training data, creating the known _K-folds_. 
 
 On the other hand, **the test data, here validation dataset, it is not used at all**.
 
-One important point is to apply the parameter equally across all the _K-folds_, before starting with a new parameter value. So for this project it was tested the algorithm calculating RMSE, but wit several provided parameter values.    
-This is expressed with this formula:
+One important point is to apply the parameter equally across all the _K-folds_, before starting with a new parameter value. So for this project, it was tested the algorithm calculating RMSE, but with several provided parameter values.    
+This is expressed with this formula (Equation \@ref(eq:RMSEcross-equation)):
 
-$$
-\mbox{RMSE}(\lambda) = \frac{1}{K} \sum_{b=1}^K \mbox{RMSE}_b(\lambda) 
-$$
+\begin{equation}
+\mbox{RMSE}(\lambda) = \frac{1}{K} \sum_{b=1}^K \mbox{RMSE}_b(\lambda) (\#eq:RMSEcross-equation)
+\end{equation}
 
-In this sense, it was defined to create 3 _K-folds_, due to hardware processing. As a result or estimation is the following:
-$$
-\hat{\mbox{RMSE}}(\lambda) = \frac{1}{3} \sum_{b=1}^3 \hat{\mbox{RMSE}}_b(\lambda)
-$$
-The final step was to select the parameter that minimizes the RMSE (see 3.-Results section). 
+In this sense, it was defined to create 3 _K-folds_, due to memory processing, selecting the parameter that minimizes the k fold RMSE (Equation \@ref(eq:3cross-equation)):
+\begin{equation}
+Min\mbox{RMSE}(\lambda) = \frac{1}{3} \sum_{b=1}^3 \mbox{RMSE}_b(\lambda) (\#eq:3cross-equation)
+\end{equation}
 
+## Testing calibrated algorithm
 
-### 2.5.-Testing calibrated algorithm
+Finally, after obtaining the optimal $\lambda$, it was added to the algorithm and reapplied the test, but instead of using the training data as in [Cross-validation] section, it was used the test data (**validation dataset**). 
 
-Finally, after obtaining the optimal $\lambda$, it was added to the algorithm and reapplied the test, but instead of using the training data as in section 2.4.1, it was used the test data (validation dataset). 
+# Results
 
+This section is organized presenting the lambda value selection and the values of the typical error loss. The calculation of the $\sum_{k=1}^K x^k_{u,i} \hat{b}_k$ was already done in the [Genre effect $\hat{b}_k$ and Sum] section.
 
-## 3.-Results
-
-This section is organized presenting the lambda value selection and the values of the typical error loss.
-
-
-### 3.1.-Choosing Lambda 
+## Choosing Lambda 
 
 First, it was created the _K-folds_ with their corresponding training and validate set. The  process was meticulously made, assuring to define properly the training and test set from the training set _edx_.
 ```{r choosing lambda, eval=FALSE}
@@ -224,20 +444,21 @@ removed[[i]] <- anti_join(as.data.frame(edx_temp_list[i]),as.data.frame(edx_test
 edx_tr_list[[i]] <- rbind(edx_tr_list[[i]], removed[[i]])
 }
 #remove temporal unnecessary data
-rm(edx_temp_list,removed, edx_temps,control,edx_trainings)
+rm(edx_temp_list,removed)
 ```
 
-Secondly, it was applied the cross validation formula. To simplify the calculations it was tested only 11 $\lambda$ values, all of them integer values from 0 to 11.   
+Secondly, it was applied the cross validation formula. To simplify the calculations it was tested 21 $\lambda$ values, from 0 to 20. It is remarked that the $\mbox{RMSE}$ included the $\sum_{k=1}^K x^k_{u,i} \hat{b}_k$ variable.
 
 ```{r applying cross validation formula, eval=FALSE}
 #Procedure is to test  possible lambda values,
 #then it is created 3x11 possible RMSE values, using loop, sapply 
 #and matrix formulas.
 
-lambdas <- seq(0, 10, 1)# 11 possible lambda values
+lambdas <- seq(0, 10, 0.5)# 20 possible lambda values
 rmses<-list()
 for (j in 1:3) {
 rmses[[j]] <- sapply(lambdas, function(l){
+  
   mu <- mean(edx_tr_list[[j]]$rating)
   
   b_i <- edx_tr_list[[j]] %>% 
@@ -248,37 +469,40 @@ rmses[[j]] <- sapply(lambdas, function(l){
     left_join(b_i, by="movieId") %>%
     group_by(userId) %>%
     summarize(b_u = sum(rating - b_i - mu)/(n()+l))
+  
   predicted_ratings <- 
     edx_test_list[[j]] %>% 
     left_join(b_i, by = "movieId") %>%
     left_join(b_u, by = "userId") %>%
-    mutate(pred = mu + b_i + b_u) %>%
+    mutate(pred = mu + b_i + b_u + b_k) %>%# b_k it was 
+    #calculated as a mean value in the 2.4.1 section
     pull(pred)
   
   return(RMSE(predicted_ratings, edx_test_list[[j]]$rating))
 })}
 ```
 
-In this case, the procedure took a couple of minutes since it was creating at least 33 operations (3 _K-folds_ x 11 $\lambda$ values). 
+In this case, the procedure took a couple of minutes since it was creating at least 63 operations (3 _K-folds_ x 21 $\lambda$ values). 
 
 The next step was to get the overall RMSE according to each $\lambda$ value, and then to select the optimal $\lambda$.
 
-```{r loading values,echo=FALSE}
-lambdas <- seq(0, 10, 1)# 11 possible lambda values
+```{r loading values,echo=FALSE, eval=TRUE}
+lambdas <- seq(0, 10, 0.5)# 20 possible lambda values
 ```
 
-```{r overall RMSE, eval=TRUE}
+```{r overall RMSE, eval=TRUE,echo=TRUE, warning=FALSE}
 #RMSE calculation from the cross-validation step
-RMSE_t<-rowMeans(matrix(cbind(rmses[[1]],rmses[[2]],rmses[[3]]),11,3))
+RMSE_t<-rowMeans(matrix(cbind(rmses[[1]],rmses[[2]],rmses[[3]]),length(lambdas),3))
 ```
 
-The next graph present the $\lambda$ results:
+The next graph present the $\lambda$ results (Figure \@ref(fig:plot-lambda)):
 
-```{r plot lambda,echo=FALSE,fig.width=5, fig.height=3}
-qplot(lambdas, RMSE_t) #comparison of lambda values with RMSE
+```{r plot-lambda,echo=FALSE,fig.width=5, fig.height=3,fig.align='center', fig.cap='RMSE training values per lambda'}
+qplot(lambdas,RMSE_t, xlab='lambda values',#comparison of lambda values with RMSE
+      ylab='RMSE training values')
 ```
 
-As it can be seen, the optimal $\lambda$ from the cross validation is 5 
+As it can be seen, the optimal $\lambda$ from the cross validation is:
 
 ```{r optimal lambda,echo=TRUE}
 lambda <- lambdas[which.min(RMSE_t)]
@@ -287,11 +511,11 @@ lambda# optimal lambda
 
 So the next step was to prove this lambda in the algorithm and to test it with the validation dataset with RMSE.
 
-### 3.2.-RMSE
+## RMSE
 
 The algorithm calculation is the following:
 
-```{r final algorithm, echo=TRUE, message=FALSE}
+```{r final algorithm, echo=TRUE, message=FALSE,eval=TRUE}
 ##Final calculation
 mu <- mean(edx$rating) # average of all ratings
 b_i <- edx %>% #average ranking for movie i 
@@ -303,26 +527,38 @@ b_u <- edx %>% #user-specific effect u
   group_by(userId) %>%
   summarize(b_u = sum(rating - b_i - mu)/(n()+lambda))
 
+#b_k
+m_kvalues<-matrix(unlist(b_k.list))#b_k values from training data
+#matrix value genre
+val_k<-as.matrix(sapply(genres_edx, function(x) {
+  ifelse(str_detect(validation$genres, x)=='TRUE',1,0)}))
+#sum of  each rate  with genre b_k values
+val_k<-val_k%*%m_kvalues
+#add k value to edx
+validation$b_k<-val_k
+rm(val_k)
+
 predicted_ratings <- #Prediction 
   validation %>% 
   left_join(b_i, by = "movieId") %>%
   left_join(b_u, by = "userId") %>%
-  mutate(pred = mu + b_i + b_u) %>%
+  mutate(pred = mu + b_i + b_u+b_k) %>%# b_k it was calculated 
+  #as a mean value in the previous step
   pull(pred)
 ```
-As it can be observed, it has 4 calculations, the first 3 are the variables $\hat{\mu}$, $\hat{b}_i$ and $\hat{b}_u$, the last one is the prediction $\hat{y}_{u,i}$. Likewise, it was added the lambda value.
+As it can be observed, it has 5 calculations, the first 4 are the variables $\hat{\mu}$, $\hat{b}_i$, $\hat{b}_u$ and $\sum_{k=1}^K x^k_{u,i} \hat{b}_k$, the last one is the prediction $\hat{y}_{u,i}$. Likewise, it was added the lambda value.
 
 Finally, the last step was to test the algorithm.
-```{r, echo=TRUE}
+```{r, echo=TRUE, eval=TRUE}
 RMSE(predicted_ratings, validation$rating) #Final outcome 
 ```
-An acceptable prediction, since is below 1, fulfilling the machine learning requirements.
+An acceptable prediction, since is below 1, being an acceptable result. m
+
+# Conclusions
 
 
-## 4.-Conclusions
+Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rate of different movies from the MovieLens 10M dataset. The approach used 4 variables (average of all rankings, ranking of a movie and user-specific effect, and genre sum effect). Furthermore, it was added penalizations to the last variables as well, to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **`r RMSE(predicted_ratings, validation$rating)`**, fulfilling the requirements for the first Capstone project.   
 
+In term of the difficulties experienced during the project elaboration, the memory RAM capacity can determine the performance and methodology of a machine learning approach. Indeed, this could be crucial for any project and for the present one it was a huge handicap. As a recommendation, if one wants to dedicate in the world of data science is mandatory to invest in a desktop computer with high memory disc and RAM capacity.
 
-Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rate of different movies from the MovieLens dataset. The approach used 3 variables (average of all rankings, average ranking of a movie and user-specific effect), and added penalizations to the last variables as well, to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **0.8648177**, fulfilling the requirements of the course.   
-
-Even though this project is based in a consistent machine learning approach (recommendation system), there are still data patterns that could be integrated to the algorithm. For example, it seems that rates are related not only to movie genres (drama, comedy, etc) and/or topics (mafia, medieval, etc), but also to actor/actress. Considering them undoubtedly will help to improve the algorithm, being extremely useful to predict rates in the streaming company or even for similar activities. 
- 
+Finally, even though this project is based in a consistent machine learning approach (recommendation system), there are still data patterns that could be integrated to the algorithm. For example, it seems that rates could be related to the presence of relevant actor/actresses, or by being a blockbuster. Considering them undoubtedly will help to improve the algorithm, being extremely useful to predict rates in the streaming company or even for similar activities.
