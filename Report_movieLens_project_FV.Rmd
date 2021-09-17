@@ -1,9 +1,4 @@
 ---
-title: "Report movieLens Project"
-author: "Felipe Vergara"
-output:
-  pdf_document: default
----
 output:
    bookdown::pdf_book:
     includes:
@@ -26,12 +21,12 @@ link-citations: TRUE
 
 Nowadays big companies are available to collect massive amount of customer data which can be useful to improve their products and services. Generally, one important approach is to make a simple and clear experience to users by filtering vital information, according to user's preferences, interest or behaviour to an item/product [@Isinkaye]. As a result, a customer finds easily an item related to his preference.  
 
-The present document is one of the items of the first **Capstone** project and part of the requirements to obtain the **HarvardX Data Science Certificate** (For further details, as the production of the training and test data, please look on [Movie_Rating_FV](https://github.com/vergoraf/MovieLens-Project/blob/main/Movie_Rating_FV.R)). It presents the elaboration of a recommendation system 
+The present document is one of the items of the first **Capstone** project and part of the requirements to obtain the **HarvardX Data Science Certificate** (For further details, as the production of the training and test data, please look at [Movie_Rating_FV](https://github.com/vergoraf/MovieLens-Project/blob/main/Movie_Rating_FV.R)). It presents the elaboration of a recommendation system 
 using the Movielens data, obtained from [this website](http://files.grouplens.org/datasets/movielens/ml-10m.zip). The aim is to predict how a user will rate a specific movie according to specific dataset characteristics such as average rating, average user rating, genre effect, etc.
 
 There are different *Movielens* data versions, however, to make a simple analysis it was used the 10M version, released in January 2009. At difference with other versions, no demographic information is included, being the user represented by an ID. 
 
-In the next sections is presented the data exploration on different variables, then is applied the methodology applied by [@rafalab], extending the analysis including the genre effect variable. Afterwards, it is included the penalization approach, calculating $\lambda$ for the variables user and movies through cross-validation. Finally, it is displayed the results and conclusions, fulfilling the requirement for this first Capstone project.
+In the next sections are presented the data exploration on different variables, then is applied the methodology applied by [@rafalab], extending the analysis including the genre effect variable. Afterwards, it is included the penalization approach, calculating $\lambda$ for the variables user and movies through cross-validation. Finally, it is displayed the results and conclusions, fulfilling the requirement for this first Capstone project.
 
 ```{r instlibraries, echo=FALSE, message=FALSE, warning=FALSE, error=FALSE}
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
@@ -48,16 +43,18 @@ Diverse tools are necessary to run the project, thus the libraries here below wh
 ```{r loadinglibraries, message=FALSE, warning=FALSE}
 library(tidyverse)# organization and visualization data
 library(caret)# machine learning procedure
-library( kableExtra) #for table presentations
+library(kableExtra) #for table presentations
+library(rlist)# more functions for list management
+library(lubridate)#to manage time data
 ```
 
-Likewise, the training and test data and other resources must be loaded at this stage, instead of being produced within this project, due to memory processing. However, as a particularity of this project, resources will be added and removed constantly to do not overload the memory.
+Likewise, the training and test data and other resources must be loaded at this stage, instead of being produced within this project, due to hardware processing. 
 
 ```{r echo=FALSE}
 load("rda_data/validation.rda") #test data
 load("rda_data/edx.rda")#training data
 load(file="rda_data/rmses.rda")# used in results
-load(file="rda_data/genres_edx.rda")# b_k of each rate
+load(file="rda_data/genres_edx.rda")# b_k of each rating
 load(file="rda_data/genres_count.rda")#count of the existing genres
 load(file="rda_data/genre_rating.rda") #average rating of each genre
 load(file="rda_data/rat_time.rda")# rating date
@@ -69,11 +66,11 @@ load(file="rda_data/b_k.list.rda")# rmses data from cross-validation
 
 The dataset is compounded by ratings of users to movies from a score of 0 (very bad) to 5 (very good). It contains more than 10 million ratings of of 10681 movies done by 71567 users [@Movielens].
 
-As the recommendation system is a machine learning application, it must be created a training data and testing data. **the former is for the algorithm creation, and the latter is for assessing our final algorithm**. Generally, during the procedure is used mostly the training data which corresponds to the 90% of the dataset. The training dataset dimensions can be seen in Table \@ref(tab:training-data-dimension).
-
 ```{r training-data-dimension, echo=FALSE}
 edx%>% summarize( rows= dim(edx)[1], columns= dim(edx)[2])%>% kbl(booktabs = TRUE, caption = "Training data dimension",digits = 3, format.args = list(big.mark = ",",  scientific = FALSE), "latex")%>%kable_styling(latex_options = "hold_position") 
 ```
+As the recommendation system is a machine learning application, it must be created a training data and testing data. **the former is for the algorithm creation, and the latter is for assessing our final algorithm**. Generally, during the procedure is used mostly the training data which corresponds to the 90% of the dataset. The training dataset dimensions can be seen in Table \@ref(tab:training-data-dimension).
+
 As it can be seen, it is the 90 % of the raw data and consists of six columns. Below is presented an extract of the training data, being possible to identify the disposable variables in Table \@ref(tab:dataset-example):
 
 ```{r dataset-example, echo=FALSE}
@@ -238,7 +235,7 @@ with $x^k_{u,i}$ = 1 if $g_{u,i}$ is genre k
 with $x^k_{u,i}$ = 0 if $g_{u,i}$ is not genre k
 
 Where:  
-$y_{u,i}$: Actual rate  
+$y_{u,i}$: Actual rating  
 $\mu$: average of all ratings  
 $b_i$: average ranking for movie$i$ or _bias_  
 $b_u$: user-specific effect$u$  
@@ -248,7 +245,7 @@ $\sum_{k=1}^K x^k_{u,i}$: sum of each genre effect of a x rating
 $\varepsilon_{u,i}$: independent errors sampled taking into account   previous parameters.   
 
 When is considered as prediction, the $\varepsilon_{u,i}$ is out. So, 
-the formula indicates that the average ($\hat{\mu}$) of all ratings is the simplest approach to predict a certain rate. However, there were movies that are rated higher than others and also  users who rated extremely positive and negative than others (Figure \@ref(fig:histogram-users-and-movies)). Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie$_i$ (Equation \@ref(eq:movie-effect)). On the other side $b_u$ represents the average rate of user$_u$ corrected by $b_i$ (Equation \@ref(eq:usereff-equation)).
+the formula indicates that the average ($\hat{\mu}$) of all ratings is the simplest approach to predict a certain rating. However, there were movies that are rated higher than others and also  users who rated extremely positive and negative than others (Figure \@ref(fig:histogram-users-and-movies)). Therefore, to integrate the mentioned effect, $b_i$ refers to the average ranking of movie$_i$ (Equation \@ref(eq:movie-effect)). On the other side $b_u$ represents the average rating of user$_u$ corrected by $b_i$ (Equation \@ref(eq:usereff-equation)).
 
 \begin{equation}
 \hat{b}_i = \frac{1}{N}\sum_{i} Y_{u,i} - \hat{\mu} (\#eq:movie-effect)
@@ -317,7 +314,7 @@ load(file="Capstone/rda_data/b_k.list.rda")
 rm(b_i,b_k,b_u,mu,edx_)
 ```
 
-#### Calculation sum $\hat{b}_k$ for each rate    
+#### Calculation sum $\hat{b}_k$ for each rating    
 \hfill\break
 The aim was to create a new column in the training data, being the sum of each genre $\hat{b}_k$ value of each rating (Equation\@ref(eq:sumbk-equation)). First, it was created a matrix (rows = ratings, columns = genre) with values of 1 if genre presented, and 0 when genre is not presented in a rating. Then it was multiplied with the $\hat{b}_k$, which was converted too in a matrix. 
 
@@ -327,10 +324,10 @@ The aim was to create a new column in the training data, being the sum of each g
 with $x^k_{u,i}$ = 1 if $g_{u,i}$ is genre k  
 with $x^k_{u,i}$ = 0 if $g_{u,i}$ is not genre k
 
-The result of this operation is a new matrix of 1 column which was combined with the training data. However, due to memory processing, the data training data was divided 10 times (independently from the previous genre subdivision).
+The result of this operation is a new matrix of 1 column which was combined with the training data. However, due to hardware processing, the data training data was divided 10 times (independently from the previous genre subdivision).
 The next script is an extract of all the process. Here is presented 1 of the 10 subdivisions.
 ```{r sum-bk, echo=TRUE, eval=FALSE}
-#is done in this way to not overwhelm memory processing
+#is done in this way to not overwhelm hardware processing
 m_kvalues<-matrix(unlist(b_k.list))
 #subdivide edx in 10 times
 #subbdivision
@@ -338,7 +335,7 @@ edx_1<-edx[1:1000000,]
 #matrix value genre
 a_1<-as.matrix(sapply(genres_edx, function(x) {
   ifelse(str_detect(edx_1$genres, x)=='TRUE',1,0)}))
-#sum of  each rate with genre b_k values
+#sum of  each rating with genre b_k values
 k_1<-a_1%*%m_kvalues
 rm(edx_1,a_1)
 #subbdivision
@@ -365,12 +362,12 @@ Finally, the algorithm was tested using the typical error loss expressed as the 
 \mbox{RMSE} = \sqrt{\frac{1}{N} \sum_{u,i}^{} \left( \hat{y}_{u,i} - y_{u,i} \right)^2 } (\#eq:RMSE-equation)
 \end{equation}
 
-It means the typical error that is made when it is predicted a rate. The importance of this formula is to observe the differences between the rate $y_{u,i}$ with the predicted rates $\hat{y}_{u,i}$. Low values mean a better prediction of the model. Values over 1, for example, means that the typical error is larger than 1 score, so it is necessary to get values below 1. 
+It means the typical error that is made when it is predicted a rating. The importance of this formula is to observe the differences between the rating $y_{u,i}$ with the predicted ratings $\hat{y}_{u,i}$. Low values mean a better prediction of the model. Values over 1, for example, means that the typical error is larger than 1 score, so it is necessary to get values below 1. 
 
 
 ## Penalizations
 
-Notwithstanding, before testing the algorithm it was decided to apply penalties over average ranking for movie $\hat{b}_i$ and for the user-specific effect $\hat{b}_u$. The idea is based that the _bias_ and the _user-specific effect_ are affected by the number of observations associated to them. So, at larger observations the penalization is lower.  For this step, it was not considered to be applied on $\hat{b}_k$, since the memory processing was would be much more than it could cover the personal computer, and as the observation number for each genre is much larger than user and movies (except for no genres listed movies), a penalization is nonsense. 
+Notwithstanding, before testing the algorithm it was decided to apply penalties over average ranking for movie $\hat{b}_i$ and for the user-specific effect $\hat{b}_u$. The idea is based that the _bias_ and the _user-specific effect_ are affected by the number of observations associated to them. So, at larger observations the penalization is lower.  For this step, it was not considered to be applied on $\hat{b}_k$, since the hardware processing was would be much more than it could cover the personal computer, and as the observation number for each genre is much larger than user and movies (except for "no genres listed movies"), a penalization is nonsense. 
 
 In this sense, to constraint the variability of the effect sizes, it was considered that for $\hat{b}_i$ and $\hat{b}_u$ values having few observations, it was better to be assigned values close or even 0, instead of the provided value. The penalization is represented by  $\lambda$, which is a tuning parameter, being practically ignored when there were large observations. At a larger $\lambda$, shrinks more. 
 
@@ -406,7 +403,7 @@ This is expressed with this formula (Equation \@ref(eq:RMSEcross-equation)):
 \mbox{RMSE}(\lambda) = \frac{1}{K} \sum_{b=1}^K \mbox{RMSE}_b(\lambda) (\#eq:RMSEcross-equation)
 \end{equation}
 
-In this sense, it was defined to create 3 _K-folds_, due to memory processing, selecting the parameter that minimizes the k fold RMSE (Equation \@ref(eq:3cross-equation)):
+In this sense, it was defined to create 3 _K-folds_, due to hardware processing, selecting the parameter $\lambda$ that minimizes the k fold RMSE (Equation \@ref(eq:3cross-equation)):
 \begin{equation}
 Min\mbox{RMSE}(\lambda) = \frac{1}{3} \sum_{b=1}^3 \mbox{RMSE}_b(\lambda) (\#eq:3cross-equation)
 \end{equation}
@@ -532,7 +529,7 @@ m_kvalues<-matrix(unlist(b_k.list))#b_k values from training data
 #matrix value genre
 val_k<-as.matrix(sapply(genres_edx, function(x) {
   ifelse(str_detect(validation$genres, x)=='TRUE',1,0)}))
-#sum of  each rate  with genre b_k values
+#sum of  each rating  with genre b_k values
 val_k<-val_k%*%m_kvalues
 #add k value to edx
 validation$b_k<-val_k
@@ -552,13 +549,13 @@ Finally, the last step was to test the algorithm.
 ```{r, echo=TRUE, eval=TRUE}
 RMSE(predicted_ratings, validation$rating) #Final outcome 
 ```
-An acceptable prediction, since is below 1, being an acceptable result. m
+An acceptable prediction, since is below 1, being an acceptable result.
 
 # Conclusions
 
 
-Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rate of different movies from the MovieLens 10M dataset. The approach used 4 variables (average of all rankings, ranking of a movie and user-specific effect, and genre sum effect). Furthermore, it was added penalizations to the last variables as well, to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **`r RMSE(predicted_ratings, validation$rating)`**, fulfilling the requirements for the first Capstone project.   
+Summarizing, the obtained result satisfies the expectations of this project. It was applied a recommendation system to predict user rating of different movies from the MovieLens 10M dataset. The approach used 4 variables (average of all rankings, ranking of a movie and user-specific effect, and genre sum effect). Furthermore, it was added penalizations to the last variables as well, to incorporate specific characteristics of the movie streaming field. In the end, the result is trustworthy, having a loss of less than **`r RMSE(predicted_ratings, validation$rating)`**, fulfilling the requirements for the first Capstone project.   
 
 In term of the difficulties experienced during the project elaboration, the memory RAM capacity can determine the performance and methodology of a machine learning approach. Indeed, this could be crucial for any project and for the present one it was a huge handicap. As a recommendation, if one wants to dedicate in the world of data science is mandatory to invest in a desktop computer with high memory disc and RAM capacity.
 
-Finally, even though this project is based in a consistent machine learning approach (recommendation system), there are still data patterns that could be integrated to the algorithm. For example, it seems that rates could be related to the presence of relevant actor/actresses, or by being a blockbuster. Considering them undoubtedly will help to improve the algorithm, being extremely useful to predict rates in the streaming company or even for similar activities.
+Finally, even though this project is based in a consistent machine learning approach (recommendation system), there are still data patterns that could be integrated to the algorithm. For example, it seems that ratings could be related to the presence of relevant actor/actresses, or by being a blockbuster. Considering them undoubtedly will help to improve the algorithm, being extremely useful to predict ratings in the streaming company or even for similar activities.
